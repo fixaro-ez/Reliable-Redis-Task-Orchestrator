@@ -15,7 +15,7 @@ RETRY_DELAY_SECONDS = 30
 
 
 async def move_due_retries(redis_client: redis.Redis) -> None:
-    due_tasks = await redis_client.zrangebyscore(RETRY_SET, min=-1, max=time.time())
+    due_tasks = await redis_client.zrangebyscore(RETRY_SET, min="-inf", max=time.time())
     if not due_tasks:
         return
 
