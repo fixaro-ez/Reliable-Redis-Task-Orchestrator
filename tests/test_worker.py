@@ -45,7 +45,7 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         redis_client.pipeline.return_value = pipeline
 
         retry_task = Task(payload={"should_fail": True}, retries=0, max_retries=2)
-        dead_task = Task(payload={"should_fail": True}, retries=1, max_retries=2)
+        dead_task = Task(payload={"should_fail": True}, retries=2, max_retries=2)
 
         with patch("worker.asyncio.sleep", new=AsyncMock()):
             await process_task(redis_client, task_to_json(retry_task))

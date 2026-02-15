@@ -26,10 +26,12 @@ async def move_due_retries(redis_client: redis.Redis) -> None:
     await pipeline.execute()
 
 
-async def process_task(redis_client: redis.Redis, raw_task: str) -> None:
+async def process_task(
+    redis_client: redis.Redis, raw_task: str, simulate_seconds: float = 1.0
+) -> None:
     task = task_from_json(raw_task)
     try:
-        await asyncio.sleep(1)
+        await asyncio.sleep(simulate_seconds)
         if task.payload.get("should_fail"):
             raise RuntimeError("Simulated task failure")
         await redis_client.lrem(PROCESSING_QUEUE, 1, raw_task)
