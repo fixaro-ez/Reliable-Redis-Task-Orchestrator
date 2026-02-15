@@ -1,11 +1,13 @@
+import time
 import unittest
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
-from models import Task, task_to_json
+from models import Task, task_from_json, task_to_json
 from worker import (
     DEAD_LETTER_QUEUE,
     PROCESSING_QUEUE,
     RETRY_SET,
+    RETRY_DELAY_SECONDS,
     move_due_retries,
     process_task,
 )
@@ -49,7 +51,12 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
 
         with patch("worker.asyncio.sleep", new=AsyncMock()):
             await process_task(redis_client, task_to_json(retry_task))
-        pipeline.zadd.assert_called_once()
+        _, zadd_payload = pipeline.zadd.call_args.args
+        self.assertEqual(pipeline.zadd.call_args.args[0], RETRY_SET)
+        self.assertEqual(len(zadd_payload), 1)
+        updated_raw_task, retry_at = next(iter(zadd_payload.items()))
+        self.assertEqual(task_from_json(updated_raw_task).retries, 1)
+        self.assertGreaterEqual(retry_at, time.time() + RETRY_DELAY_SECONDS - 1)
         pipeline.lpush.assert_not_called()
 
         pipeline.reset_mock()

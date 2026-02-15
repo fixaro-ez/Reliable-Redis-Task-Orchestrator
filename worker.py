@@ -36,7 +36,7 @@ async def process_task(
             raise RuntimeError("Simulated task failure")
         await redis_client.lrem(PROCESSING_QUEUE, 1, raw_task)
         print(f"Task {task.task_id} processed successfully")
-    except Exception:
+    except Exception as exc:
         task.retries += 1
         updated_task = task_to_json(task)
         pipeline = redis_client.pipeline()
@@ -44,18 +44,22 @@ async def process_task(
         if task.retries < task.max_retries:
             retry_at = time.time() + RETRY_DELAY_SECONDS
             pipeline.zadd(RETRY_SET, {updated_task: retry_at})
-            print(f"Task {task.task_id} failed; scheduled retry #{task.retries}")
+            print(
+                f"Task {task.task_id} failed ({type(exc).__name__}: {exc}); scheduled retry #{task.retries}"
+            )
         else:
             pipeline.lpush(DEAD_LETTER_QUEUE, updated_task)
-            print(f"Task {task.task_id} moved to dead letter queue")
+            print(
+                f"Task {task.task_id} failed ({type(exc).__name__}: {exc}); moved to dead letter queue"
+            )
         await pipeline.execute()
 
 
 async def worker_loop(redis_client: redis.Redis, poll_interval: float = 1.0) -> None:
     while True:
         await move_due_retries(redis_client)
-        raw_task: Optional[str] = await redis_client.rpoplpush(
-            PENDING_QUEUE, PROCESSING_QUEUE
+        raw_task: Optional[str] = await redis_client.lmove(
+            PENDING_QUEUE, PROCESSING_QUEUE, "RIGHT", "LEFT"
         )
         if raw_task is None:
             await asyncio.sleep(poll_interval)
